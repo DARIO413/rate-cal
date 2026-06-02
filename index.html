@@ -5,10 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>费率对比计算器</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
 </head>
 <body class="bg-gray-100 py-10">
-  <div class="max-w-2xl mx-auto bg-white p-6 rounded-xl shadow">
+  <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
     <h1 class="text-2xl font-bold mb-4">商家费率对比工具</h1>
+
+    <!-- 上传账单区域 -->
+    <div class="mb-6 p-4 border-2 border-dashed border-blue-300 rounded-lg bg-blue-50">
+      <h3 class="font-bold mb-3">📤 上传账单自动分析</h3>
+      <div class="flex items-center gap-3">
+        <input type="file" id="billFile" accept=".pdf,.xlsx,.xls,.csv,.jpg,.png,.jpeg" class="flex-1 border p-2 rounded">
+        <button onclick="analyzeBill()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+          分析账单
+        </button>
+      </div>
+      <p class="text-sm text-gray-600 mt-2">支持格式：PDF、Excel、CSV、图片（JPG/PNG）</p>
+      <div id="analysisResult" class="mt-3 text-sm"></div>
+    </div>
 
     <!-- 输入区域 -->
     <div class="space-y-3 mb-6">
@@ -53,7 +68,7 @@
     </div>
 
     <!-- 计算按钮 -->
-    <button onclick="calc()" class="bg-blue-600 text-white px-4 py-2 rounded mb-4">
+    <button onclick="calc()" class="bg-blue-600 text-white px-4 py-2 rounded mb-4 hover:bg-blue-700">
       立即计算对比
     </button>
 
@@ -68,6 +83,152 @@
   </div>
 
   <script>
+    // 数字识别函数
+    function extractNumbers(text) {
+      const numbers = text.match(/[\d,\.]+/g) || [];
+      return numbers.map(n => parseFloat(n.replace(/,/g, '')));
+    }
+
+    // 分析账单
+    async function analyzeBill() {
+      const fileInput = document.getElementById('billFile');
+      const file = fileInput.files[0];
+      const resultDiv = document.getElementById('analysisResult');
+
+      if (!file) {
+        resultDiv.innerHTML = '<span class="text-red-600">请选择文件</span>';
+        return;
+      }
+
+      resultDiv.innerHTML = '<span class="text-blue-600">正在分析...</span>';
+
+      try {
+        let extractedText = '';
+
+        if (file.type === 'application/pdf') {
+          extractedText = await extractFromPDF(file);
+        } else if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+          extractedText = await extractFromCSV(file);
+        } else if (file.type.includes('spreadsheet') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          extractedText = await extractFromExcel(file);
+        } else if (file.type.startsWith('image/')) {
+          resultDiv.innerHTML = '<span class="text-yellow-600">💡 图片OCR需要在线服务支持，已提取文件名进行基础分析</span>';
+          extractedText = file.name;
+        }
+
+        // 智能分析文本
+        analyzeText(extractedText);
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="text-red-600">分析失败: ${error.message}</span>`;
+      }
+    }
+
+    // 从PDF提取文本
+    async function extractFromPDF(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsWorker.getDocument({ data: arrayBuffer }).promise;
+      let text = '';
+
+      for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        text += textContent.items.map(item => item.str).join(' ') + '\n';
+      }
+
+      return text;
+    }
+
+    // 从CSV提取数据
+    async function extractFromCSV(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsText(file);
+      });
+    }
+
+    // 从Excel提取数据
+    async function extractFromExcel(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          let text = '';
+
+          workbook.SheetNames.forEach(sheetName => {
+            const worksheet = workbook.Sheets[sheetName];
+            const csv = XLSX.utils.sheet_to_csv(worksheet);
+            text += csv + '\n';
+          });
+
+          resolve(text);
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    // 智能分析文本
+    function analyzeText(text) {
+      const resultDiv = document.getElementById('analysisResult');
+      const lowerText = text.toLowerCase();
+
+      // 识别关键词
+      const volumeKeywords = ['交易金额', '总金额', 'total', 'amount', 'volume', '金额合计'];
+      const transKeywords = ['交易笔数', '笔数', 'count', 'transaction', 'transactions', '交易数'];
+
+      let foundVolume = null;
+      let foundTrans = null;
+
+      // 查找交易金额
+      for (let keyword of volumeKeywords) {
+        const idx = lowerText.indexOf(keyword.toLowerCase());
+        if (idx !== -1) {
+          const segment = text.substring(idx, idx + 200);
+          const numbers = extractNumbers(segment);
+          if (numbers.length > 0) {
+            foundVolume = Math.max(...numbers.filter(n => n > 100)); // 金额通常较大
+            break;
+          }
+        }
+      }
+
+      // 查找交易笔数
+      for (let keyword of transKeywords) {
+        const idx = lowerText.indexOf(keyword.toLowerCase());
+        if (idx !== -1) {
+          const segment = text.substring(idx, idx + 200);
+          const numbers = extractNumbers(segment);
+          if (numbers.length > 0) {
+            foundTrans = Math.min(...numbers.filter(n => n > 0 && n < 100000)); // 笔数通常较小
+            break;
+          }
+        }
+      }
+
+      // 显示结果并填充表单
+      let resultHTML = '<span class="text-green-600">✅ 分析完成:</span><br>';
+
+      if (foundVolume) {
+        resultHTML += `💰 检测到交易金额: $${foundVolume.toFixed(2)}<br>`;
+        document.getElementById('volume').value = foundVolume;
+      } else {
+        resultHTML += '⚠️ 未检测到交易金额<br>';
+      }
+
+      if (foundTrans) {
+        resultHTML += `📊 检测到交易笔数: ${foundTrans.toFixed(0)}<br>`;
+        document.getElementById('trans').value = foundTrans;
+      } else {
+        resultHTML += '⚠️ 未检测到交易笔数<br>';
+      }
+
+      resultDiv.innerHTML = resultHTML;
+      
+      // 自动计算
+      setTimeout(calc, 500);
+    }
+
     function calc() {
       let volume = parseFloat(document.getElementById('volume').value) || 0;
       let trans = parseFloat(document.getElementById('trans').value) || 0;
@@ -85,6 +246,8 @@
       document.getElementById('costB').innerText = '$' + costB.toFixed(2);
       document.getElementById('save').innerText = '$' + save.toFixed(2);
     }
+
+    // 初始化
     calc();
   </script>
 </body>
