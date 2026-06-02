@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>费率对比计算器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 py-10">
+  <div class="max-w-2xl mx-auto bg-white p-6 rounded-xl shadow">
+    <h1 class="text-2xl font-bold mb-4">商家费率对比工具</h1>
+
+    <!-- 输入区域 -->
+    <div class="space-y-3 mb-6">
+      <div>
+        <label class="block font-medium">月交易金额 ($)</label>
+        <input id="volume" type="number" value="50000" class="w-full border p-2 rounded">
+      </div>
+      <div>
+        <label class="block font-medium">月交易笔数</label>
+        <input id="trans" type="number" value="2000" class="w-full border p-2 rounded">
+      </div>
+    </div>
+
+    <!-- 费率A：你现在的 -->
+    <div class="mb-4 p-3 border rounded bg-gray-50">
+      <h3 class="font-bold">你当前的费率</h3>
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <div>
+          <label>费率 %</label>
+          <input id="rateA_percent" value="2.6" class="w-full border p-1">
+        </div>
+        <div>
+          <label>单笔费用 $</label>
+          <input id="rateA_per" value="0.10" class="w-full border p-1">
+        </div>
+      </div>
+    </div>
+
+    <!-- 费率B：你的优惠方案 -->
+    <div class="mb-4 p-3 border rounded bg-green-50">
+      <h3 class="font-bold">优惠方案费率</h3>
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <div>
+          <label>费率 %</label>
+          <input id="rateB_percent" value="2.0" class="w-full border p-1">
+        </div>
+        <div>
+          <label>单笔费用 $</label>
+          <input id="rateB_per" value="0.07" class="w-full border p-1">
+        </div>
+      </div>
+    </div>
+
+    <!-- 计算按钮 -->
+    <button onclick="calc()" class="bg-blue-600 text-white px-4 py-2 rounded mb-4">
+      立即计算对比
+    </button>
+
+    <!-- 结果 -->
+    <div class="text-lg space-y-1">
+      <div>当前成本：<span id="costA" class="font-bold"></span></div>
+      <div>优惠成本：<span id="costB" class="font-bold text-green-600"></span></div>
+      <div class="mt-2 text-xl font-bold text-green-700">
+        每月节省：<span id="save"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function calc() {
+      let volume = parseFloat(document.getElementById('volume').value) || 0;
+      let trans = parseFloat(document.getElementById('trans').value) || 0;
+
+      let a_pct = parseFloat(document.getElementById('rateA_percent').value) || 0;
+      let a_per = parseFloat(document.getElementById('rateA_per').value) || 0;
+      let b_pct = parseFloat(document.getElementById('rateB_percent').value) || 0;
+      let b_per = parseFloat(document.getElementById('rateB_per').value) || 0;
+
+      let costA = (volume * a_pct / 100) + (trans * a_per);
+      let costB = (volume * b_pct / 100) + (trans * b_per);
+      let save = costA - costB;
+
+      document.getElementById('costA').innerText = '$' + costA.toFixed(2);
+      document.getElementById('costB').innerText = '$' + costB.toFixed(2);
+      document.getElementById('save').innerText = '$' + save.toFixed(2);
+    }
+    calc();
+  </script>
+</body>
+</html>
